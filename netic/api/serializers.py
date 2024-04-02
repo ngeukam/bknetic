@@ -43,7 +43,7 @@ class RegisterSerializer(serializers.ModelSerializer):
     @classmethod
     def create(self, validated_data):
         user = User.objects.create(
-            name=validated_data['name'],
+            name=validated_data['name'].title(),
             phone_number=validated_data['phone_number'],
             # email=validated_data['email'],
             password=validated_data['password']
@@ -55,7 +55,12 @@ class RegisterSerializer(serializers.ModelSerializer):
 class UserProfileSerializer(serializers.ModelSerializer):
     class Meta:
         model= User
-        fields = ('lat', 'long')     
+        fields = ('id', 'phone_number', 'lat', 'long')
+
+class UserPhoneSerializer(serializers.ModelSerializer):
+    class Meta:
+        model= User
+        fields = ('phone_number', 'id', 'name')    
 
 class UserSerializer(serializers.ModelSerializer):
     order_of_user = serializers.PrimaryKeyRelatedField(many=True, read_only=True)
@@ -83,7 +88,7 @@ class OrderJobsDysplaySerializer(serializers.ModelSerializer):
     order = OrderSerializer()
     class Meta:
         model = Jobs
-        fields = ('job_status', 'order')
+        fields = ('id','job_status', 'order','accepted_at')
 
 class OrderDisplaySerializer(serializers.ModelSerializer):
     accepted = serializers.SerializerMethodField()
@@ -105,7 +110,7 @@ class InvoiceSerializer(serializers.ModelSerializer):
     payment_info = PaymentSerializer(many=True, read_only=True)
     class Meta:
         model = Invoice
-        fields = ('payment_info', 'amount', 'created_at')
+        fields = ('payment_info', 'amount', 'reference', 'invoice_user', 'created_at')
 
 
 

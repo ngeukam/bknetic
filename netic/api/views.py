@@ -11,6 +11,9 @@ from django.shortcuts import get_object_or_404
 from django.db.models import Sum
 from django.http import Http404
 from rest_framework.views import APIView
+from api.helpers import send_otp_code
+from api.custompagination import CustomPagination
+import datetime
 
 User = get_user_model()
 
@@ -18,7 +21,7 @@ User = get_user_model()
 class MyObtainTokenPairView(TokenObtainPairView):
     permission_classes = (AllowAny,)
     serializer_class = MyTokenObtainPairSerializer
-#Registration
+#REGISTRATION
 class UserRegisterAPIView(generics.CreateAPIView):
     permission_classes = (AllowAny,)
     queryset = User.objects.all()
@@ -29,19 +32,32 @@ class UserRegisterAPIView(generics.CreateAPIView):
             'status': 200,
             'data': response.data
         }, status=status.HTTP_200_OK)
-#Profile
+#GET SPECIFIC USER PROFILE
 class UserProfileAPIView(generics.RetrieveUpdateAPIView):
     serializer_class = UserProfileSerializer
     permission_classes = [IsAuthenticated]
     queryset = User.objects.all()
-
     def get_object(self):
         user = self.queryset.get(id=self.request.user.id)
         return user
-#Logout
+#GET USER PHONE  
+class GetUserPhoneAPIView(APIView):
+    permission_classes = (IsAuthenticated, )
+    def get_object(self, pk):
+        try:
+            return User.objects.get(pk=pk)
+        except User.DoesNotExist:
+            raise Http404
+   
+    def get(self, request, pk, format=None):
+        user = self.get_object(pk)
+        serializer = UserPhoneSerializer(user)
+        return Response(serializer.data)
+    
+#LOGOUT
 class LogoutAPIView(generics.GenericAPIView):
-    permission_classes = (IsAuthenticated,)
-    def get(self,request, *args, **kwargs):
+    permission_classes = (AllowAny,)
+    def post(self,request, *args, **kwargs):
         try:
            if request._authenticate():
                 request.user.auth_token.delete()
@@ -51,25 +67,33 @@ class LogoutAPIView(generics.GenericAPIView):
         return Response({'success': 'You successfully logged out!'}, status=status.HTTP_200_OK)
 
 #ORDER
-class OrderListAPIView(APIView):
+class OrderExcludeUserListAPIView(generics.ListAPIView):
+    serializer_class = OrderDisplaySerializer
+    permission_classes = (IsAuthenticated,)
+    queryset = Order.objects.all()
+    pagination_class = CustomPagination
+    
+    def get_queryset(self):
+        if self.request.user.is_authenticated:
+            user = self.request.user
+        user = self.request.user
+        return Order.objects.filter(is_active=True).exclude(order_user = user).order_by('-updated_at')
+    
+class OrderListAPIView(generics.ListCreateAPIView):
     """
     Create and List a order instance.
     """
+    serializer_class = OrderDisplaySerializer
     permission_classes = (IsAuthenticated,)
-    def post(self, request, format=None):
-        serializer = OrderDisplaySerializer(data=request.data)
-        if serializer.is_valid():
-            saved_obj = serializer.save()
-            response_data = OrderDisplaySerializer(saved_obj).data
-            return Response(response_data, status=status.HTTP_201_CREATED)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-    #all orders except user orders
-    def get(self, request, format=None):
-        user = get_object_or_404(User, pk= request.user.id)
-        orders = Order.objects.filter(is_active=True).exclude(order_user_id = user.id).all()
-        serializer = OrderDisplaySerializer(orders, many=True)
-        return Response(serializer.data)
+    queryset = Order.objects.all()
+    pagination_class = CustomPagination
     
+    def get_queryset(self):
+        if self.request.user.is_authenticated:
+            user = self.request.user
+        user = self.request.user
+        return Order.objects.filter(order_user = user).order_by('-updated_at')
+
 class OrderDetailAPIView(APIView):
     permission_classes = (IsAuthenticated,)
     """
@@ -100,6 +124,16 @@ class OrderDetailAPIView(APIView):
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 #JOBS
+class AllJobUserListAPIView(generics.ListAPIView):
+    serializer_class = OrderJobsDysplaySerializer
+    permission_classes = (IsAuthenticated,)
+    queryset = Jobs.objects.all()
+    pagination_class = CustomPagination
+    
+    def get_queryset(self):
+        user = get_object_or_404(User, pk= self.request.user.id)
+        return user.jobs_set.filter(job_status=True).order_by('-updated_at')
+       
 class JobsListAPIView(APIView):
     permission_classes = (IsAuthenticated,)
     """
@@ -110,17 +144,11 @@ class JobsListAPIView(APIView):
         serializer = JobsSerializer(data=request.data)
         if serializer.is_valid():
             saved_obj = serializer.save()
-            change_order_active = Order.objects.filter(id=request.data['order']).update(is_active=False)
-            response_data = JobsSerializer(saved_obj).data
-            return Response(response_data, status=status.HTTP_201_CREATED)
+            update_order_active = Order.objects.filter(id=request.data['order']).update(is_active=False)
+            job_data = JobsSerializer(saved_obj).data
+            return Response(job_data, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-    
-    #all jobs done by user
-    def get(self, request, format=None):
-        user = get_object_or_404(User, pk= request.user.id)
-        jobs = user.jobs_set.filter(job_status=True)
-        serializer = OrderJobsDysplaySerializer(jobs, many=True)
-        return Response(serializer.data)
+       
 
 class JobsDetailAPIView(APIView):
     permission_classes = (IsAuthenticated,)
@@ -136,22 +164,23 @@ class JobsDetailAPIView(APIView):
         order = self.get_object(pk)
         user =  get_object_or_404(User, pk= request.user.id)
         try:
-            repost_change1 = user.jobs_set.filter(order=order).update(job_status=False)
-            repost_change2 = user.order_set.filter(id=order.id).update(is_active=True)
+            repost_change2 = user.order_set.filter(id=order.id).update(is_active=True, updated_at=datetime.datetime.now())
+            repost_change1 = user.jobs_set.filter(order=order).delete()
         except BaseException as e:
-            return Response({"error": str(e)},status=status.HTTP_400_BAD_REQUEST)
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
         return Response({"success":"You are successfully repost ! "}, status=status.HTTP_200_OK)
 
-class TotalPaidAmountDetailAPIView(APIView):
+class TotalAmountDetailAPIView(APIView):
     permission_classes = (IsAuthenticated,)
     def get(self, request, format=None):
         user =  get_object_or_404(User, pk= request.user.id)
         try:
             all_id_done_jobs = user.jobs_set.filter(job_status=True).values_list("order")
-            total_paid_amount = Order.objects.filter(id__in =all_id_done_jobs).filter(is_paid=False).aggregate(total_paid_amount=Sum('paid_amount'))
+            total_amount_to_paid = Order.objects.filter(id__in =all_id_done_jobs).filter(is_paid=False).aggregate(total_paid_amount=Sum('paid_amount'))
+            total_gain_amount = Order.objects.filter(id__in =all_id_done_jobs).aggregate(total_budget=Sum('budget'))
         except BaseException as e:
             return Response({"error": str(e)},status=status.HTTP_400_BAD_REQUEST)
-        return Response(total_paid_amount, status=status.HTTP_200_OK)
+        return Response([total_amount_to_paid, total_gain_amount], status=status.HTTP_200_OK)
 
     #update is_paid status of order to TRUE after invoice created
     def put(self, request, format=None):
@@ -168,26 +197,32 @@ class InvoiceAPIView(APIView):
     permission_classes = (IsAuthenticated,)
     def post(self, request, format=None):
         serializer = InvoiceSerializer(data=request.data)
+        print(serializer.is_valid())
         if serializer.is_valid():
             saved_obj = serializer.save()
             response_data = InvoiceSerializer(saved_obj).data
             return Response(response_data, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+class AllInvoiceUserListAPIView(generics.ListAPIView):
+    serializer_class = InvoiceSerializer
+    permission_classes = (IsAuthenticated,)
+    queryset = Invoice.objects.all()
+    pagination_class = CustomPagination
     
-    #all invoices off user
-    def get(self, request, format=None):
-        user = get_object_or_404(User, pk= request.user.id)
-        invoices = Invoice.objects.filter(invoice_user_id=user.id).all()
-        serializer = InvoiceSerializer(invoices, many=True)
-        return Response(serializer.data)
-
-
-#get current user u = User.obejts.get(id='')
-#all orders of current user : u.order_user.all()
-#all job of current user : aj = u.jobs_set.all()
-#all done job of current user : aj.filter(job_status=True)
-#all job done of current user aj= u.jobs_set.filter(job_status=True)
-#total paid amount of current user u.order_user.aggregate(total_paid_amount=Sum('paid_amount'))
-
-#All Id of done jobs: all_id_job_done = u.jobs_set.filter(job_status=True).values_list("order")
-#total_paid_amount of done jobs:  Order.objects.filter(id__in =all_id_job_done).aggregate(total_paid_amount=Sum('paid_amount'))
+    def get_queryset(self):
+        user = get_object_or_404(User, pk= self.request.user.id)
+        return Invoice.objects.filter(invoice_user_id=user.id).order_by('-created_at')
+    
+      
+#SEND OTP CODE
+class SendOtpCodeAPIView(APIView):
+    permission_classes = (AllowAny,)
+    def post(self, request, format=None):
+        code = request.data['otpcode']
+        phone = User.objects.filter(phone_number= request.data['phone'])
+        if(len(phone)==0):
+            send_otp_code(request.data['phone'], code)
+            return Response(status=status.HTTP_200_OK)
+        else:
+            return Response(status=status.HTTP_400_BAD_REQUEST)

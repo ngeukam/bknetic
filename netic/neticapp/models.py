@@ -1,8 +1,6 @@
 from django.db import models
 from django.contrib.auth.models import AbstractUser, BaseUserManager
 from django.conf import settings
-from django.db.models.signals import post_save
-from django.dispatch import receiver
 import uuid
 from neticapp import data
 import binascii
@@ -98,12 +96,14 @@ class Jobs(models.Model):
     class Meta:
         verbose_name = 'Job'
         verbose_name_plural = 'Jobs'
+        unique_together = ('order', 'job_status')
     def __str__(self):
         return f"This job #{self.order.reference} is doing by {self.user.phone_number}"
 
 
 class Invoice(models.Model):
-    invoice_user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name = 'invoice_user')
+    reference = models.CharField(max_length=10, null=True, blank=True,  editable=False, unique=True)
+    invoice_user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
     amount = models.FloatField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -112,9 +112,16 @@ class Invoice(models.Model):
         verbose_name_plural = 'Invoices'
     def __str__(self):
         return f"This invoice #INV{self.id} belongs to {self.invoice_user.phone_number}"
+    @staticmethod
+    def generate_reference():
+        return  binascii.hexlify(os.urandom(16)).decode().upper()[0:10]
+    def save(self, *args, **kwargs):
+        if self._state.adding and (not self.reference or 
+                                   Invoice.objects.filter(reference=self.reference).exists()):
+            self.reference = self.generate_reference()
+        super().save(*args, **kwargs)
 
 class Payment(models.Model):
-    #payment_user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
     payment_invoice= models.ForeignKey(Invoice, on_delete=models.CASCADE, related_name = 'payment_info')
     pay_amount = models.FloatField(null=True, blank=True)
     remaining_amount = models.FloatField(null=True, blank=True)
@@ -136,16 +143,3 @@ class Payment(models.Model):
         else:
             self.status = 1
         super().save(*args, **kwargs)
-    
-# class PaymentStatus(models.Maodel):
-#     status = models.IntegerField(default=1,choices=PAYMENT_STATUSES)#unpaid, waiting, partial, paid
-        
-# class Payment(models.Model):
-#     pay_invoice = models.ForeignKey(Invoice, on_delete=models.CASCADE, null=True)
-#     user =  models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, null=True)
-#     pay_amount = models.FloatField()
-#     payment_status = models.ForeignKey(PaymentStatus, on_delete=models.CASCADE, null=True)
-#     created_at = models.DateTimeField(auto_now_add=True)
-#     updated_at = models.DateTimeField(auto_now=True)
-#     created_at = models.DateTimeField(auto_now_add=True)
-#     updated_at = models.DateTimeField(auto_now=True)

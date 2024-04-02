@@ -25,7 +25,7 @@ SECRET_KEY = 'django-insecure-l2(8drwtu)o7_#5=q79kklwfcenzm1s#)#w(3t+&d90-)7pmn0
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = ['10.0.2.2', '127.0.0.1', '192.168.43.128']
 
 
 # Application definition
@@ -65,12 +65,13 @@ REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
         'rest_framework_simplejwt.authentication.JWTAuthentication',
     ],
+    'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.LimitOffsetPagination'
 }
+
 
 ROOT_URLCONF = 'core.urls'
 
 AUTH_USER_MODEL = "neticapp.User"
-
 
 TEMPLATES = [
     {
@@ -130,7 +131,7 @@ TIME_ZONE = 'UTC'
 
 USE_I18N = True
 
-USE_TZ = True
+USE_TZ = False
 
 
 # Static files (CSS, JavaScript, Images)
