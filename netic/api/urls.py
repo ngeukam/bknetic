@@ -12,6 +12,7 @@ urlpatterns = [
     path('profile', UserProfileAPIView.as_view(), name='profile'),
     path('user-phone/<str:pk>', GetUserPhoneAPIView.as_view(), name='retrive_user_phone'),
     path('send-otp', SendOtpCodeAPIView.as_view(), name='send_otp_code'),
+    path('change-password/<str:pk>', ChangePasswordAPIView.as_view(), name='change_password'),
     #ORDER
     path('order-list/', OrderExcludeUserListAPIView.as_view(), name='order_list'),
     path('order/', OrderListAPIView.as_view(), name='create_list_order'),

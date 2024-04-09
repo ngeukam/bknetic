@@ -36,6 +36,18 @@ PRODUCTS = (
 	(
 		10, "Prélèvements"
     ),
+    (
+		11, "Bagages"
+    ),
+    (
+		12, "Poubelles"
+    ),
+    (
+		13, "Piéces mécanique"
+    ),
+    (
+		14, "Matériel"
+    ),
 )
 
 VEHICULES = (
@@ -56,6 +68,21 @@ VEHICULES = (
     ),
 	(
 		6, "Avion",
+    ),
+    (
+		7, "Vélo",
+    ),
+    (
+		8, "Brouette",
+    ),
+    (
+		9, "Bus",
+    ),
+     (
+		10, "Fourgon",
+    ),
+     (
+		11, "Train",
     ),
 )
 

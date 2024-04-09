@@ -1,9 +1,10 @@
 from neticapp.models import *
 from rest_framework import serializers
-from django.contrib.auth import get_user_model
+from django.contrib.auth import get_user_model, password_validation
 from rest_framework.validators import UniqueValidator
 from django.contrib.auth.password_validation import validate_password
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
+from django.utils.translation import gettext_lazy as _
 
 User = get_user_model()
 
@@ -55,12 +56,12 @@ class RegisterSerializer(serializers.ModelSerializer):
 class UserProfileSerializer(serializers.ModelSerializer):
     class Meta:
         model= User
-        fields = ('id', 'phone_number', 'lat', 'long')
+        fields = ('id', 'phone_number', 'name', 'lat', 'long')
 
 class UserPhoneSerializer(serializers.ModelSerializer):
     class Meta:
         model= User
-        fields = ('phone_number', 'id', 'name')    
+        fields = ('phone_number', 'id')    
 
 class UserSerializer(serializers.ModelSerializer):
     order_of_user = serializers.PrimaryKeyRelatedField(many=True, read_only=True)
@@ -88,7 +89,7 @@ class OrderJobsDysplaySerializer(serializers.ModelSerializer):
     order = OrderSerializer()
     class Meta:
         model = Jobs
-        fields = ('id','job_status', 'order','accepted_at')
+        fields = ('id','job_status', 'order','created_at')
 
 class OrderDisplaySerializer(serializers.ModelSerializer):
     accepted = serializers.SerializerMethodField()
@@ -111,7 +112,6 @@ class InvoiceSerializer(serializers.ModelSerializer):
     class Meta:
         model = Invoice
         fields = ('payment_info', 'amount', 'reference', 'invoice_user', 'created_at')
-
 
 
 # class ChangeEmailSerializer(serializers.Serializer):
@@ -141,7 +141,25 @@ class ChangePhoneSerializer(serializers.Serializer):
             raise serializers.ValidationError(
                 'User with this phone number is already exists')
         return attrs
+    
+class ChangePasswordSerializer(serializers.Serializer):
+    old_password = serializers.CharField(max_length=128, write_only=True, required=True)
+    new_password = serializers.CharField(max_length=128, write_only=True, required=True)
 
+    def validate_old_password(self, value):
+        user = self.context['request'].user
+        if not user.check_password(value):
+            raise serializers.ValidationError(
+                _('Your old password was entered incorrectly. Please enter it again.')
+            )
+        return value
+
+    def save(self, **kwargs):
+        password = self.validated_data['new_password']
+        user = self.context['request'].user
+        user.set_password(password)
+        user.save()
+        return user
 class SendPasswordResetMailSerializer(serializers.Serializer):
     phone_number = serializers.CharField(write_only=True, required=True)
 

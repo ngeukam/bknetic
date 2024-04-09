@@ -74,7 +74,7 @@ class Order(models.Model):
         verbose_name = 'Order'
         verbose_name_plural = 'Orders'
     def __str__(self):
-        return f"Thats is order #{self.reference} of user {self.order_user.phone_number}"
+        return f"order #{self.reference} of {self.order_user.phone_number}"
     
     @staticmethod
     def generate_reference():
@@ -91,7 +91,7 @@ class Jobs(models.Model):
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
     order = models.ForeignKey(Order, on_delete=models.CASCADE)
     job_status = models.BooleanField(default=True)
-    accepted_at = models.DateTimeField(auto_now_add=True)
+    created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     class Meta:
         verbose_name = 'Job'

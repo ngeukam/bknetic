@@ -13,7 +13,7 @@ from django.http import Http404
 from rest_framework.views import APIView
 from api.helpers import send_otp_code
 from api.custompagination import CustomPagination
-import datetime
+from geopy.distance import geodesic as GD
 
 User = get_user_model()
 
@@ -54,6 +54,23 @@ class GetUserPhoneAPIView(APIView):
         serializer = UserPhoneSerializer(user)
         return Response(serializer.data)
     
+#CHANGE PASSWORD IN PROFILE SCREEN
+class ChangePasswordAPIView(generics.UpdateAPIView):
+    permission_classes = (IsAuthenticated,)
+    serializer_class = ChangePasswordSerializer
+
+    def update(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        if(serializer.is_valid(raise_exception=True)):
+            serializer.save()
+        response = {
+                    'status': 'success',
+                    'code': status.HTTP_200_OK,
+                    'message': 'Password updated successfully',
+                    'data': []
+                }
+        return Response(response)
+   
 #LOGOUT
 class LogoutAPIView(generics.GenericAPIView):
     permission_classes = (AllowAny,)
@@ -74,10 +91,22 @@ class OrderExcludeUserListAPIView(generics.ListAPIView):
     pagination_class = CustomPagination
     
     def get_queryset(self):
-        if self.request.user.is_authenticated:
-            user = self.request.user
         user = self.request.user
-        return Order.objects.filter(is_active=True).exclude(order_user = user).order_by('-updated_at')
+        lat = self.request.GET.get('lat')
+        long = self.request.GET.get('long')
+        query = Order.objects.filter(is_active=True).exclude(order_user = user).order_by('-created_at')
+        q_set = set(query)
+        user_actual_position = (float(lat), float(long))
+        try:
+            for item in query:
+                order_coord_depart = (item.lat_departure_place, item.long_departure_place)
+                dist = GD(order_coord_depart, user_actual_position).km
+                if dist > 20:
+                    q_set.remove(item)
+            q_set
+        except BaseException as e:
+            return Response({'error': str(e)})
+        return list(q_set)
     
 class OrderListAPIView(generics.ListCreateAPIView):
     """
@@ -92,7 +121,7 @@ class OrderListAPIView(generics.ListCreateAPIView):
         if self.request.user.is_authenticated:
             user = self.request.user
         user = self.request.user
-        return Order.objects.filter(order_user = user).order_by('-updated_at')
+        return Order.objects.filter(order_user = user).order_by('-created_at')
 
 class OrderDetailAPIView(APIView):
     permission_classes = (IsAuthenticated,)
@@ -120,9 +149,16 @@ class OrderDetailAPIView(APIView):
 
     def delete(self, request, pk, format=None):
         order = self.get_object(pk)
-        order.delete()
-        return Response(status=status.HTTP_204_NO_CONTENT)
-
+        # Script qui empéche la suppression une fois que la commande est engagée dans un job
+        order_job =  order.jobs_set.filter(job_status=True)
+        try:
+           if(len(order_job) == 0):
+            order.delete()
+            return Response(status=status.HTTP_204_NO_CONTENT)
+        except BaseException as e:
+           return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        return Response({'response':'nothing delete'})
+       
 #JOBS
 class AllJobUserListAPIView(generics.ListAPIView):
     serializer_class = OrderJobsDysplaySerializer
@@ -132,7 +168,7 @@ class AllJobUserListAPIView(generics.ListAPIView):
     
     def get_queryset(self):
         user = get_object_or_404(User, pk= self.request.user.id)
-        return user.jobs_set.filter(job_status=True).order_by('-updated_at')
+        return user.jobs_set.filter(job_status=True).order_by('-created_at')
        
 class JobsListAPIView(APIView):
     permission_classes = (IsAuthenticated,)
@@ -153,7 +189,7 @@ class JobsListAPIView(APIView):
 class JobsDetailAPIView(APIView):
     permission_classes = (IsAuthenticated,)
     """
-    Create and List a user jobs instance.
+   Repost order instance
     """
     def get_object(self, pk):
             try:
@@ -162,10 +198,11 @@ class JobsDetailAPIView(APIView):
                 raise Http404
     def put(self, request, pk, format=None):
         order = self.get_object(pk)
-        user =  get_object_or_404(User, pk= request.user.id)
         try:
-            repost_change2 = user.order_set.filter(id=order.id).update(is_active=True, updated_at=datetime.datetime.now())
-            repost_change1 = user.jobs_set.filter(order=order).delete()
+            repost = Order.objects.filter(id=order.id).filter(is_paid=False).update(is_active=True)
+            print(repost)
+            if repost == 1:
+                 delete_job = Jobs.objects.filter(order_id=order.id).delete()
         except BaseException as e:
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
         return Response({"success":"You are successfully repost ! "}, status=status.HTTP_200_OK)
@@ -197,7 +234,6 @@ class InvoiceAPIView(APIView):
     permission_classes = (IsAuthenticated,)
     def post(self, request, format=None):
         serializer = InvoiceSerializer(data=request.data)
-        print(serializer.is_valid())
         if serializer.is_valid():
             saved_obj = serializer.save()
             response_data = InvoiceSerializer(saved_obj).data

@@ -25,12 +25,13 @@ SECRET_KEY = 'django-insecure-l2(8drwtu)o7_#5=q79kklwfcenzm1s#)#w(3t+&d90-)7pmn0
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = ['10.0.2.2', '127.0.0.1', '192.168.43.128']
+ALLOWED_HOSTS = ['10.0.2.2', '127.0.0.1', '192.168.43.128', '192.168.34.101']
 
 
 # Application definition
 
 INSTALLED_APPS = [
+    'clearcache',
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
@@ -112,6 +113,9 @@ AUTH_PASSWORD_VALIDATORS = [
     },
     {
         'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator',
+        'OPTIONS': {
+            'min_length': 6,
+        }
     },
     {
         'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator',
